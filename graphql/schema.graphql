@@ -27173,6 +27173,55 @@ type AppUpdated implements Event {
   app: App
 }
 
+
+type CheckoutAvailablePaymentGateways implements Event {
+  """
+  Time of the event.
+  """
+  issuedAt: DateTime
+
+  """
+  Saleor version that triggered the event.
+  """
+  version: String
+
+  """
+  The user or application that triggered the event.
+  """
+  issuingPrincipal: IssuingPrincipal
+
+  """
+  The application receiving the webhook.
+  """
+  recipient: App
+
+  """
+  The application the event relates to.
+
+  Added in Saleor 3.4.
+
+  Note: this API is currently in Feature Preview and can be subject to changes at later point.
+  """
+  app: App
+
+  """
+  List of available payment gateways.
+  """
+  availablePaymentGateways(
+    """
+    A currency for which gateways will be returned.
+
+    DEPRECATED: this field will be removed in Saleor 4.0. Use `channel` argument instead.
+    """
+    currency: String
+
+    """
+    Slug of a channel for which the data should be returned.
+    """
+    channel: String
+  ): [PaymentGateway!]!
+}
+
 type AppDeleted implements Event {
   """
   Time of the event.
