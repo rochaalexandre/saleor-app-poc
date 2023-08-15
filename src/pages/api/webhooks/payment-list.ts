@@ -1,18 +1,20 @@
 import { gql } from "urql";
-import {  SaleorSyncWebhook } from "@saleor/app-sdk/handlers/next";
+import { SaleorSyncWebhook } from "@saleor/app-sdk/handlers/next";
 import { AvailablePaymentGatewaysWebhookPayloadFragment } from "../../../../generated/graphql";
 import { saleorApp } from "../../../saleor-app";
 import { createClient } from "../../../lib/create-graphq-client";
-import { SyncWebhookEventType } from '@saleor/app-sdk/types';
+import { SyncWebhookEventType } from "@saleor/app-sdk/types";
 
 /**
  * Example payload of the webhook. It will be transformed with graphql-codegen to Typescript type: OrderCreatedWebhookPayloadFragment
  */
 const AvailablePaymentGatewaysWebhookPayload = gql`
-  fragment AvailablePaymentGatewaysWebhookPayload on CheckoutAvailablePaymentGateways {
-    availablePaymentGateways(channel: "") {
-      id
-      name
+  fragment AvailablePaymentGatewaysWebhookPayload on CheckoutCreated {
+    checkout {
+      availablePaymentGateways {
+        id
+        name
+      }
     }
   }
 `;
@@ -21,10 +23,10 @@ const AvailablePaymentGatewaysWebhookPayload = gql`
  * Top-level webhook subscription query, that will be attached to the Manifest.
  * Saleor will use it to register webhook.
  */
-const OrderCreatedGraphqlSubscription = gql`
+const graphqlSubscription = gql`
   # Payload fragment must be included in the root query
   ${AvailablePaymentGatewaysWebhookPayload}
-  subscription OrderCreated {
+  subscription CheckoutCreated {
     event {
       ...AvailablePaymentGatewaysWebhookPayload
     }
@@ -36,13 +38,15 @@ const OrderCreatedGraphqlSubscription = gql`
  *
  * orderCreatedWebhook.getWebhookManifest() must be called in api/manifest too!
  */
-export const saleorSyncWebhook = new SaleorSyncWebhook<AvailablePaymentGatewaysWebhookPayloadFragment>({
-  name: "Order Created in Saleor",
-  webhookPath: "api/webhooks/order-created",
-  event: "PAYMENT_LIST_GATEWAYS" as unknown as SyncWebhookEventType,
-  apl: saleorApp.apl,
-  query: OrderCreatedGraphqlSubscription,
-});
+export const saleorSyncWebhook =
+  new SaleorSyncWebhook<AvailablePaymentGatewaysWebhookPayloadFragment>({
+    name: "Custom payment methods",
+    webhookPath: "api/webhooks/payment-list",
+    isActive: true,
+    event: "PAYMENT_LIST_GATEWAYS" as unknown as SyncWebhookEventType,
+    apl: saleorApp.apl,
+    query: graphqlSubscription,
+  });
 
 /**
  * Export decorated Next.js handler, which adds extra context
@@ -67,10 +71,11 @@ export default saleorSyncWebhook.createHandler((req, res, ctx) => {
     authData,
   } = ctx;
 
+  let string = payload.checkout?.availablePaymentGateways.join(" | ") || "no option available";
   /**
    * Perform logic based on Saleor Event payload
    */
-  console.log(`### Available Payment Gateways for customer: ${payload.availablePaymentGateways?.join(' | ')}`);
+  console.log(`### Available Payment Gateways for customer: ${string}`);
 
   /**
    * Create GraphQL client to interact with Saleor API.
