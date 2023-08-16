@@ -1,20 +1,16 @@
 import { gql } from "urql";
 import { SaleorSyncWebhook } from "@saleor/app-sdk/handlers/next";
-import { AvailablePaymentGatewaysWebhookPayloadFragment } from "../../../../generated/graphql";
+import { PaymentListGateways } from "../../../../generated/graphql";
 import { saleorApp } from "../../../saleor-app";
-import { createClient } from "../../../lib/create-graphq-client";
-import { SyncWebhookEventType } from "@saleor/app-sdk/types";
 
 /**
  * Example payload of the webhook. It will be transformed with graphql-codegen to Typescript type: OrderCreatedWebhookPayloadFragment
  */
-const AvailablePaymentGatewaysWebhookPayload = gql`
-  fragment AvailablePaymentGatewaysWebhookPayload on CheckoutCreated {
+const NowAvailablePaymentGatewaysWebhookPayload = gql`
+  fragment NowAvailablePaymentGatewaysWebhookPayload on PaymentListGateways {
     checkout {
-      availablePaymentGateways {
-        id
-        name
-      }
+      id
+      token
     }
   }
 `;
@@ -25,10 +21,10 @@ const AvailablePaymentGatewaysWebhookPayload = gql`
  */
 const graphqlSubscription = gql`
   # Payload fragment must be included in the root query
-  ${AvailablePaymentGatewaysWebhookPayload}
-  subscription CheckoutCreated {
+  ${NowAvailablePaymentGatewaysWebhookPayload}
+  subscription NowPaymentListGateways {
     event {
-      ...AvailablePaymentGatewaysWebhookPayload
+      ...NowAvailablePaymentGatewaysWebhookPayload
     }
   }
 `;
@@ -38,61 +34,46 @@ const graphqlSubscription = gql`
  *
  * orderCreatedWebhook.getWebhookManifest() must be called in api/manifest too!
  */
-export const saleorSyncWebhook =
-  new SaleorSyncWebhook<AvailablePaymentGatewaysWebhookPayloadFragment>({
-    name: "Custom payment methods",
-    webhookPath: "api/webhooks/payment-list",
-    isActive: true,
-    event: "PAYMENT_LIST_GATEWAYS" as unknown as SyncWebhookEventType,
-    apl: saleorApp.apl,
-    query: graphqlSubscription,
-  });
+export const saleorSyncWebhook = new SaleorSyncWebhook<PaymentListGateways>({
+  name: "Custom payment methods",
+  webhookPath: "/api/webhooks/payment-list",
+  isActive: true,
+  event: "PAYMENT_LIST_GATEWAYS" as any,
+  apl: saleorApp.apl,
+  query: graphqlSubscription,
+  onError(error) {
+    console.error(error);
+    return error;
+  },
+  async formatErrorResponse(error, req, res) {
+    console.error(`There was an error`);
+    return {
+      code: 400,
+      body: error.message,
+    };
+  },
+});
 
 /**
  * Export decorated Next.js handler, which adds extra context
  */
-export default saleorSyncWebhook.createHandler((req, res, ctx) => {
-  const {
-    /**
-     * Access payload from Saleor - defined above
-     */
-    payload,
-    /**
-     * Saleor event that triggers the webhook (here - ORDER_CREATED)
-     */
-    event,
-    /**
-     * App's URL
-     */
-    baseUrl,
-    /**
-     * Auth data (from APL) - contains token and saleorApiUrl that can be used to construct graphQL client
-     */
-    authData,
-  } = ctx;
-
-  let string = payload.checkout?.availablePaymentGateways.join(" | ") || "no option available";
-  /**
-   * Perform logic based on Saleor Event payload
-   */
-  console.log(`### Available Payment Gateways for customer: ${string}`);
-
-  /**
-   * Create GraphQL client to interact with Saleor API.
-   */
-  const client = createClient(authData.saleorApiUrl, async () => ({ token: authData.token }));
-
-  /**
-   * Now you can fetch additional data using urql.
-   * https://formidable.com/open-source/urql/docs/api/core/#clientquery
-   */
-
-  // const data = await client.query().toPromise()
-
-  /**
-   * Inform Saleor that webhook was delivered properly.
-   */
-  return res.status(200).end();
+export default saleorSyncWebhook.createHandler((req, res, context) => {
+  console.warn(`THIS HAS BEEN CALLED!`, req.body, context.payload);
+  return res.status(200).send(
+    context.buildResponse([
+      {
+        name: "Now",
+        id: "cnm.payments.now",
+        config: [
+          {
+            field: "store_customer_card",
+            value: "false",
+          },
+        ],
+        currencies: ["USD", "PLN"],
+      },
+    ] as any)
+  );
 });
 
 /**
